@@ -2,9 +2,9 @@
 
 import os
 import re
-import time
 import argparse
 import requests
+import mimetypes
 
 
 def check_name(name):
@@ -13,56 +13,103 @@ def check_name(name):
     return name
 
 
-def make_tag():
-    return time.strftime("%Y%m%d-%H%M%S")
+def already_exists(response, field):
+    if response.status_code != 422:
+        return False
+
+    for error in response.json().get("errors", []):
+        if error.get("field") != field or error.get("code") != "already_exists":
+            return False
+
+    return True
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Backup GitHub repositories")
-    parser.add_argument("token", metavar="TOKEN", help="GitHub API token")
-    parser.add_argument("username", metavar="USERNAME", help="project username")
-    parser.add_argument("reponame", metavar="REPONAME", help="project reponame")
-    parser.add_argument("artifacts", metavar="ARTIFACT", help="the artifact directory", nargs="+")
-    args = parser.parse_args()
-
-    username = check_name(args.username)
-    reponame = check_name(args.reponame)
-    tag = make_tag()
-
+def create_release(token, owner, repo, tag, exclusive=False):
     response = requests.post(
-        "https://api.github.com/repos/{0}/{1}/releases".format(username, reponame),
+        "https://api.github.com/repos/{0}/{1}/releases".format(owner, repo),
         json={
             "tag_name": tag,
             "body": "Generated release {0}.".format(tag),
             "name": tag
         },
         headers={
-            "Authorization": "token {0}".format(args.token)
+            "Authorization": "token {0}".format(token)
         }
     )
+
+    if already_exists(response, "tag_name") and not exclusive:
+        response = requests.get(
+            "https://api.github.com/repos/{0}/{1}/releases/tags/{2}".format(owner, repo, tag),
+            headers={
+                "Authorization": "token {0}".format(token)
+            }
+        )
+        response.raise_for_status()
+        return False, response.json()
+
     response.raise_for_status()
-    release = response.json()
-    print "Generated release {0}".format(release["name"])
+    return True, response.json()
+
+
+def upload_asset(token, upload_url, filename):
+    content_type = mimetypes.guess_type(filename)
+    if content_type is None:
+        content_type = "application/octet-stream"
+
+    with open(filename, "rb") as fileobj:
+        response = requests.post(
+            upload_url,
+            data=fileobj,
+            params={
+                "name": os.path.basename(filename)
+            },
+            headers={
+                "Authorization": "token {0}".format(token),
+                "Content-Type": content_type
+            }
+        )
+
+    if already_exists(response, "name"):
+        return False
+
+    response.raise_for_status()
+    return True
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Backup GitHub repositories.")
+    parser.add_argument("-x", "--exclusive", action="store_true", help="fail if the release already exists")
+    parser.add_argument("token", metavar="TOKEN", help="GitHub API token")
+    parser.add_argument("owner", metavar="OWNER", help="project owner")
+    parser.add_argument("repo", metavar="REPO", help="project repository name")
+    parser.add_argument("tag", metavar="TAG", help="tag for the release")
+    parser.add_argument("assets", metavar="ASSET", help="uploadable asset file", nargs="*")
+    args = parser.parse_args()
+
+    tag = check_name(args.tag)
+    owner = check_name(args.owner)
+    repo = check_name(args.repo)
+
+    for asset in args.assets:
+        with open(asset, "rb") as fileobj:
+            if os.fstat(fileobj.fileno()).st_size == 0:
+                raise RuntimeError("can not attach empty file '{0}'".format(asset))
+
+    created, release = create_release(args.token, owner, repo, tag, args.exclusive)
+    if created:
+        print "Created a new release {0}".format(release["name"])
+    else:
+        print "Already existing release {0}".format(release["name"])
 
     # upload_url is given in uri-template form. We could
     # use a package for this...
     upload_url, _, _ = release["upload_url"].partition("{")
 
-    for artifact in args.artifacts:
-        with open(artifact, "rb") as artifact_file:
-            response = requests.post(
-                upload_url,
-                data=artifact_file,
-                params={
-                    "name": os.path.basename(artifact)
-                },
-                headers={
-                    "Authorization": "token {0}".format(args.token),
-                    "Content-Type": "application/octet-stream"
-                }
-            )
-            response.raise_for_status()
-        print "Uploaded", artifact
+    for asset in args.assets:
+        if upload_asset(args.token, upload_url, asset):
+            print "Uploaded asset '{0}'".format(asset)
+        else:
+            print "Skipped already existing asset '{0}'".format(asset)
 
 
 if __name__ == "__main__":
