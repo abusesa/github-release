@@ -28,9 +28,7 @@ def create_release(token, owner, repo, tag, exclusive=False):
     response = requests.post(
         "https://api.github.com/repos/{0}/{1}/releases".format(owner, repo),
         json={
-            "tag_name": tag,
-            "body": "Generated release {0}.".format(tag),
-            "name": tag
+            "tag_name": tag
         },
         headers={
             "Authorization": "token {0}".format(token)
