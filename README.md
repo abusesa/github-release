@@ -23,3 +23,5 @@ deployment:
 ```
 
 In this example we assume that the environment variable ```GITHUB_API_TOKEN``` contains a GitHub API token suitable for creating releases. The required scope depends on whether you release to a public or a private repository: **public_repo** for public, **repo** for private.
+
+A GitHub user has to have at least **write** level access to the repository to be able to create and edit releases.
