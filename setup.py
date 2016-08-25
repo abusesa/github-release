@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name="github-release",
-    version="0.0.2",
+    version="0.0.3",
     description="A helper tool for creating GitHub releases",
     author="Joachim Viide <jviide@iki.fi>",
     url="https://github.com/abusesa/github-release",

@@ -24,11 +24,13 @@ def already_exists(response, field):
     return True
 
 
-def create_release(token, owner, repo, tag, exclusive=False):
+def create_release(token, owner, repo, tag, exclusive=False, prerelease=False):
     response = requests.post(
         "https://api.github.com/repos/{0}/{1}/releases".format(owner, repo),
         json={
-            "tag_name": tag
+            "tag_name": tag,
+            "name": tag,
+            "prerelease": prerelease
         },
         headers={
             "Authorization": "token {0}".format(token)
@@ -79,6 +81,7 @@ def upload_asset(token, upload_url, filename):
 def main():
     parser = argparse.ArgumentParser(description="Backup GitHub repositories.")
     parser.add_argument("-x", "--exclusive", action="store_true", help="fail if the release already exists")
+    parser.add_argument("-p", "--prerelease", action="store_true", help="mark the release as prerelease")
     parser.add_argument("token", metavar="TOKEN", help="GitHub API token")
     parser.add_argument("owner", metavar="OWNER", help="project owner")
     parser.add_argument("repo", metavar="REPO", help="project repository name")
@@ -95,7 +98,7 @@ def main():
             if os.fstat(fileobj.fileno()).st_size == 0:
                 raise RuntimeError("can not attach empty file '{0}'".format(asset))
 
-    created, release = create_release(args.token, owner, repo, tag, args.exclusive)
+    created, release = create_release(args.token, owner, repo, tag, args.exclusive, args.prerelease)
     if created:
         print "Created a new release {0}".format(release["name"])
     else:
