@@ -52,11 +52,10 @@ def create_release(token, owner, repo, tag, exclusive=False, prerelease=False):
 
 
 def upload_asset(token, upload_url, filename):
-    content_type = mimetypes.guess_type(filename)
+    content_type, _ = mimetypes.guess_type(filename)
+
     if content_type is None:
         content_type = "application/octet-stream"
-    elif type(content_type) is tuple:
-        content_type = content_type[0]
 
     with open(filename, "rb") as fileobj:
         response = requests.post(
